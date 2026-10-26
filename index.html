@@ -24,7 +24,7 @@
         <div class="write-title">手寫韓文 <span>用滑鼠、觸控或觸控筆書寫</span></div>
         <div class="pad-wrap"><canvas class="pad" id="pad" aria-label="韓文手寫區"></canvas><div class="pad-hint" id="padHint">在這裡寫韓文</div></div>
         <div class="controls"><button class="minor" id="clearPad">清除筆跡</button><button class="btn primary" id="showAnswer">翻開答案</button></div>
-        <div class="answer" id="answer"><div class="answer-label">韓文答案</div><div class="answer-ko" id="answerKo"></div><div class="answer-zh" id="answerZh"></div><div class="answer-actions"><button class="btn primary" id="next">下一張字卡 →</button></div></div>
+        <div class="answer" id="answer"><div class="answer-label">韓文答案</div><div class="answer-ko" id="answerKo"></div><div class="answer-zh" id="answerZh"></div><div class="answer-actions"><a class="btn" id="naverPronunciation" href="https://ko.dict.naver.com/" target="_blank" rel="noopener noreferrer">到 Naver 聽發音 ↗</a><button class="btn primary" id="next">下一張字卡 →</button></div></div>
       </div>
       <div class="end" id="end" hidden><h2>這一輪完成了</h2><p>再複習一次，讓韓文拼寫更熟悉。</p><button class="btn primary" id="restart">重新洗牌</button></div>
     </section>
@@ -37,7 +37,7 @@
     const $=id=>document.getElementById(id);let words=load(),order=[],pos=0,drawn=false;
     function load(){try{const v=JSON.parse(localStorage.getItem('korean-words'));if(Array.isArray(v)&&v.length)return v.filter(x=>Array.isArray(x)&&x.length>1&&x[0]&&x[1]).map(x=>[String(x[0]),String(x[1])])}catch{}return initial.map(x=>[...x])}
     function shuffle(){order=words.map((_,i)=>i).sort(()=>Math.random()-.5);pos=0;showCard()}
-    function showCard(){if(pos>=order.length){$('practice').hidden=true;$('end').hidden=false;return}$('practice').hidden=false;$('end').hidden=true;$('count').textContent=`${pos+1} / ${order.length}`;$('clue').textContent=words[order[pos]][1];$('answerKo').textContent=words[order[pos]][0];$('answerZh').textContent=words[order[pos]][1];$('answer').classList.remove('show');$('showAnswer').disabled=false;clearCanvas()}
+    function showCard(){if(pos>=order.length){$('practice').hidden=true;$('end').hidden=false;return}$('practice').hidden=false;$('end').hidden=true;$('count').textContent=`${pos+1} / ${order.length}`;$('clue').textContent=words[order[pos]][1];$('answerKo').textContent=words[order[pos]][0];$('answerZh').textContent=words[order[pos]][1];$('naverPronunciation').href=`https://ko.dict.naver.com/#/search?query=${encodeURIComponent(words[order[pos]][0])}`;$('answer').classList.remove('show');$('showAnswer').disabled=false;clearCanvas()}
     const canvas=$('pad'),ctx=canvas.getContext('2d');function fitCanvas(){const r=canvas.getBoundingClientRect(),d=window.devicePixelRatio||1;canvas.width=Math.round(r.width*d);canvas.height=Math.round(r.height*d);ctx.setTransform(d,0,0,d,0,0);ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#31533f';ctx.lineWidth=4}function clearCanvas(){ctx.clearRect(0,0,canvas.width,canvas.height);drawn=false;$('padHint').classList.remove('hidden');fitCanvas()}
     canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.setPointerCapture(e.pointerId);const r=canvas.getBoundingClientRect();ctx.beginPath();ctx.moveTo(e.clientX-r.left,e.clientY-r.top);drawn=true;$('padHint').classList.add('hidden')});
     canvas.addEventListener('pointermove',e=>{if(!e.buttons&&!e.pressure)return;const r=canvas.getBoundingClientRect();ctx.lineTo(e.clientX-r.left,e.clientY-r.top);ctx.stroke()});
