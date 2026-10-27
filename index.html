@@ -29,8 +29,8 @@
       <div class="end" id="end" hidden><h2>這一輪完成了</h2><p>再複習一次，讓韓文拼寫更熟悉。</p><button class="btn primary" id="restart">重新洗牌</button></div>
     </section>
   </main>
-  <dialog id="wordDialog"><div class="modal"><div class="modal-head"><h2>我的單字</h2><button class="x" id="closeDialog" aria-label="關閉">×</button></div><p>一行一個單字，格式是「韓文, 中文」。單字只會儲存在這台裝置的瀏覽器。</p><textarea id="wordEditor" spellcheck="false" aria-label="單字清單"></textarea><div class="modal-bottom"><button class="btn" id="importNotes">從筆記照片辨識</button><button class="btn primary" id="saveWords">儲存</button></div></div></dialog>
-  <dialog id="importDialog"><div class="modal"><div class="modal-head"><h2>從手寫筆記匯入</h2><button class="x" id="closeImport" aria-label="關閉">×</button></div><p>選一張清楚、光線均勻的筆記照片。辨識結果可能有誤，加入字卡前請先校對。</p><label class="file-pick">選擇照片<input id="noteFile" type="file" accept="image/*" capture="environment"></label><img id="notePreview" class="import-preview" alt="筆記預覽"><div class="progress-line"><i id="ocrProgress"></i></div><p id="ocrStatus" class="import-help" aria-live="polite">首次使用會下載 OCR 程式與韓文、繁體中文語言資料。</p><button class="btn" id="runOcr" disabled>辨識照片</button><p class="import-help">辨識後請校對，整理成每行「韓文, 中文」，再加入單字庫。</p><textarea id="importResult" class="import-result" placeholder="辨識文字會出現在這裡，可直接修正"></textarea><div class="modal-bottom"><small id="importCount">尚未匯入</small><button class="btn primary" id="addImported" disabled>加入字卡</button></div></div></dialog>
+  <dialog id="wordDialog"><div class="modal"><div class="modal-head"><h2>我的單字</h2><button class="x" id="closeDialog" aria-label="關閉">×</button></div><p>一行一個單字，格式是「韓文, 中文」。單字只會儲存在這台裝置的瀏覽器。</p><textarea id="wordEditor" spellcheck="false" aria-label="單字清單"></textarea><div class="modal-bottom"><button class="btn" id="importNotes">匯入筆記 PDF</button><button class="btn primary" id="saveWords">儲存</button></div></div></dialog>
+  <dialog id="importDialog"><div class="modal"><div class="modal-head"><h2>從筆記 PDF 匯入</h2><button class="x" id="closeImport" aria-label="關閉">×</button></div><p>選擇筆記 PDF，系統會逐頁辨識；也可以選擇照片。辨識結果可能有誤，加入字卡前請先校對。</p><label class="file-pick">選擇 PDF 或照片<input id="noteFile" type="file" accept="application/pdf,.pdf,image/*"></label><img id="notePreview" class="import-preview" alt="筆記預覽"><p id="pdfSummary" class="import-help" hidden></p><div class="progress-line"><i id="ocrProgress"></i></div><p id="ocrStatus" class="import-help" aria-live="polite">首次使用會下載 PDF 顯示與 OCR 程式、韓文和繁體中文辨識資料。</p><button class="btn" id="runOcr" disabled>開始辨識</button><p class="import-help">辨識後請校對，整理成每行「韓文, 中文」再加入字卡。</p><textarea id="importResult" class="import-result" placeholder="辨識文字會出現在這裡，可直接修正"></textarea><div class="modal-bottom"><small id="importCount">尚未匯入</small><button class="btn primary" id="addImported" disabled>加入字卡</button></div></div></dialog>
   <div class="toast" id="toast">已儲存</div>
   <script>
     const initial=[['학교','學校'],['친구','朋友'],['가족','家人'],['음식','食物'],['사랑','愛'],['시간','時間'],['오늘','今天'],['공부','學習'],['한국어','韓文'],['선생님','老師'],['책','書'],['물','水']];
@@ -47,9 +47,114 @@
     window.addEventListener('pointerup',finishStroke,{passive:false});window.addEventListener('pointercancel',finishStroke,{passive:false});window.addEventListener('lostpointercapture',e=>{if(activePointerId===e.pointerId)activePointerId=null});window.addEventListener('resize',()=>{if(!drawn)fitCanvas()});
     $('clearPad').onclick=clearCanvas;$('showAnswer').onclick=()=>{$('answer').classList.add('show');$('showAnswer').disabled=true};$('speakWord').onclick=()=>{if(!('speechSynthesis'in window)){toast('這個瀏覽器沒有語音播放功能');return}const text=words[order[pos]][0],voices=speechSynthesis.getVoices(),voice=voices.find(v=>/^ko([-_]|$)/i.test(v.lang)&&/yuna/i.test(v.name))||voices.find(v=>/^ko([-_]|$)/i.test(v.lang));const utterance=new SpeechSynthesisUtterance(text);utterance.lang='ko-KR';utterance.rate=.82;if(voice)utterance.voice=voice;utterance.onerror=()=>toast('找不到可用的韓文語音，請改用 Naver 詞典');speechSynthesis.cancel();speechSynthesis.speak(utterance)};$('next').onclick=()=>{if('speechSynthesis'in window)speechSynthesis.cancel();pos++;showCard()};$('restart').onclick=shuffle;
     $('editWords').onclick=()=>{$('wordEditor').value=words.map(w=>w.join(', ')).join('\n');$('wordDialog').showModal()};$('closeDialog').onclick=()=>$('wordDialog').close();$('saveWords').onclick=()=>{const parsed=$('wordEditor').value.split(/\r?\n/).map(line=>line.split(/[,，\t]/).map(s=>s.trim())).filter(x=>x.length>=2&&x[0]&&x[1]).map(x=>[x[0],x.slice(1).join(', ')]);if(!parsed.length){toast('請至少輸入一組韓文和中文');return}words=parsed;localStorage.setItem('korean-words',JSON.stringify(words));$('wordDialog').close();shuffle();toast('單字已儲存')};
-    let noteImage=null,ocrWorker=null;const importDialog=$('importDialog');$('importNotes').onclick=()=>importDialog.showModal();$('closeImport').onclick=()=>importDialog.close();$('noteFile').onchange=()=>{const file=$('noteFile').files[0];if(!file)return;noteImage=file;$('notePreview').src=URL.createObjectURL(file);$('notePreview').classList.add('show');$('runOcr').disabled=false;$('ocrStatus').textContent=`已選擇：${file.name}`;$('ocrProgress').style.width='0%';$('importResult').value='';$('addImported').disabled=true;$('importCount').textContent='尚未匯入'};
-    async function loadOcrLibrary(){if(window.Tesseract)return;await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';script.onload=resolve;script.onerror=()=>reject(new Error('無法載入 OCR 程式，請確認網路連線。'));document.head.appendChild(script)})}
-    $('runOcr').onclick=async()=>{if(!noteImage)return;$('runOcr').disabled=true;$('ocrStatus').textContent='正在載入 OCR…';$('ocrProgress').style.width='2%';try{await loadOcrLibrary();if(!ocrWorker){ocrWorker=await Tesseract.createWorker('kor+chi_tra',1,{logger:m=>{if(m.status){$('ocrStatus').textContent=m.status==='recognizing text'?'正在辨識筆記…':`正在準備辨識：${m.status}`;if(m.status==='recognizing text')$('ocrProgress').style.width=`${Math.round(10+(m.progress||0)*85)}%`;else if(m.status==='loading language traineddata')$('ocrProgress').style.width=`${Math.round((m.progress||0)*55)}%`}}})}const {data}=await ocrWorker.recognize(noteImage);$('importResult').value=data.text.trim();$('ocrProgress').style.width='100%';$('ocrStatus').textContent='辨識完成，請校對韓文和中文，並整理為每行一組。';updateImportCount()}catch(err){$('ocrStatus').textContent=err.message||'辨識失敗，請換一張較清楚的照片再試。';$('ocrProgress').style.width='0%'}finally{$('runOcr').disabled=false}};
+    let noteFile=null,notePreviewUrl=null,ocrWorker=null,pdfjsPromise=null,currentOcrPage=1,totalOcrPages=1;
+    const importDialog=$('importDialog');
+    $('importNotes').onclick=()=>importDialog.showModal();
+    $('closeImport').onclick=()=>$('importDialog').close();
+    function isPdfFile(file){return file.type==='application/pdf'||/\.pdf$/i.test(file.name)}
+    $('noteFile').onchange=()=>{
+      const file=$('noteFile').files[0];
+      if(!file)return;
+      noteFile=file;
+      if(notePreviewUrl)URL.revokeObjectURL(notePreviewUrl);
+      notePreviewUrl=null;
+      const isPdf=isPdfFile(file);
+      $('notePreview').classList.toggle('show',!isPdf);
+      $('pdfSummary').hidden=!isPdf;
+      if(isPdf){$('pdfSummary').textContent=`${file.name} · PDF`}
+      else{notePreviewUrl=URL.createObjectURL(file);$('notePreview').src=notePreviewUrl}
+      $('runOcr').disabled=false;
+      $('runOcr').textContent=isPdf?'辨識 PDF':'辨識照片';
+      $('ocrStatus').textContent=`已選擇：${file.name}`;
+      $('ocrProgress').style.width='0%';
+      $('importResult').value='';
+      $('addImported').disabled=true;
+      $('importCount').textContent='尚未匯入'
+    };
+    async function loadOcrLibrary(){
+      if(window.Tesseract)return;
+      await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        script.onload=resolve;
+        script.onerror=()=>reject(new Error('無法載入 OCR 程式，請確認網路連線。'));
+        document.head.appendChild(script)
+      })
+    }
+    async function loadPdfLibrary(){
+      if(window.pdfjsLib)return window.pdfjsLib;
+      if(!pdfjsPromise){
+        pdfjsPromise=import('https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.mjs').then(pdfjs=>{
+          pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@6.4.299/build/pdf.worker.mjs';
+          window.pdfjsLib=pdfjs;
+          return pdfjs
+        }).catch(err=>{
+          pdfjsPromise=null;
+          throw new Error(`無法載入 PDF 顯示程式：${err.message||'請確認網路連線。'}`)
+        })
+      }
+      return pdfjsPromise
+    }
+    async function recognizePdf(file){
+      const pdfjs=await loadPdfLibrary();
+      const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+      currentOcrPage=1;
+      totalOcrPages=pdf.numPages;
+      const results=[];
+      try{
+        for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){
+          currentOcrPage=pageNumber;
+          $('ocrStatus').textContent=`正在讀取 PDF 第 ${pageNumber} / ${pdf.numPages} 頁…`;
+          $('ocrProgress').style.width=`${Math.round((pageNumber-1)/pdf.numPages*100)}%`;
+          const page=await pdf.getPage(pageNumber);
+          const baseViewport=page.getViewport({scale:1});
+          const scale=Math.min(2.5,1800/baseViewport.width);
+          const viewport=page.getViewport({scale});
+          const pageCanvas=document.createElement('canvas');
+          pageCanvas.width=Math.ceil(viewport.width);
+          pageCanvas.height=Math.ceil(viewport.height);
+          const pageContext=pageCanvas.getContext('2d');
+          await page.render({canvasContext:pageContext,viewport}).promise;
+          $('ocrStatus').textContent=`正在辨識 PDF 第 ${pageNumber} / ${pdf.numPages} 頁…`;
+          const {data}=await ocrWorker.recognize(pageCanvas);
+          results.push(data.text.trim());
+          page.cleanup();
+          pageCanvas.width=0;
+          pageCanvas.height=0
+        }
+        return results.filter(Boolean).join('\n\n')
+      }finally{await pdf.destroy()}
+    }
+    $('runOcr').onclick=async()=>{
+      if(!noteFile)return;
+      $('runOcr').disabled=true;
+      $('ocrStatus').textContent='正在準備辨識…';
+      $('ocrProgress').style.width='2%';
+      try{
+        await loadOcrLibrary();
+        if(isPdfFile(noteFile))await loadPdfLibrary();
+        if(!ocrWorker){
+          ocrWorker=await Tesseract.createWorker('kor+chi_tra',1,{logger:m=>{
+            if(m.status==='recognizing text'){
+              $('ocrStatus').textContent=totalOcrPages>1?`正在辨識 PDF 第 ${currentOcrPage} / ${totalOcrPages} 頁…`:'正在辨識筆記…';
+              const progress=(currentOcrPage-1+(m.progress||0))/totalOcrPages;
+              $('ocrProgress').style.width=`${Math.round(progress*100)}%`
+            }else if(m.status){
+              $('ocrStatus').textContent=`正在準備辨識：${m.status}`;
+              if(m.status==='loading language traineddata')$('ocrProgress').style.width=`${Math.round((m.progress||0)*20)}%`
+            }
+          }})
+        }
+        const text=isPdfFile(noteFile)?await recognizePdf(noteFile):(await ocrWorker.recognize(noteFile)).data.text;
+        $('importResult').value=text.trim();
+        $('ocrProgress').style.width='100%';
+        $('ocrStatus').textContent='辨識完成，請校對韓文和中文，再整理成每行一組。';
+        updateImportCount()
+      }catch(err){
+        $('ocrStatus').textContent=err.message||'辨識失敗，請換一份較清楚的 PDF 或照片再試。';
+        $('ocrProgress').style.width='0%'
+      }finally{$('runOcr').disabled=false}
+    };
     function parseImported(){return $('importResult').value.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>{let parts=line.split(/[,，\t|;；]/).map(x=>x.trim());if(parts.length<2){const separated=line.match(/^(.+?)\s+([\u3400-\u9fff].*)$/u);if(separated)parts=[separated[1].trim(),separated[2].trim()]}return parts}).filter(parts=>parts.length>=2&&parts[0]&&parts[1]).map(parts=>[parts[0],parts.slice(1).join(', ')])}function updateImportCount(){const n=parseImported().length;$('importCount').textContent=n?`找到 ${n} 組有效單字`:'請整理成「韓文, 中文」格式';$('addImported').disabled=!n}$('importResult').addEventListener('input',updateImportCount);$('addImported').onclick=()=>{const imported=parseImported();if(!imported.length)return;words=words.concat(imported);localStorage.setItem('korean-words',JSON.stringify(words));importDialog.close();shuffle();toast(`已加入 ${imported.length} 個單字`)};
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}let toastTimer;function toast(s){$('toast').textContent=s;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),1800)}
     fitCanvas();shuffle();
