@@ -39,7 +39,21 @@
   <script src="sheet-sync.js"></script>
   <script>
     const initial=[['학교','學校'],['친구','朋友'],['가족','家人'],['음식','食物'],['사랑','愛'],['시간','時間'],['오늘','今天'],['공부','學習'],['한국어','韓文'],['선생님','老師'],['책','書'],['물','水']];
-    const $=id=>document.getElementById(id);let sheetSession=null,editorSession=null,editorSnapshot=null,editorInitial='',words=load(),order=[],pos=0,drawn=false;
+    function readStudyLink(){
+      const hash=String(location.hash||'');
+      if(!hash.startsWith('#deck='))return {present:false,deck:null};
+      try{
+        const encoded=hash.slice(6);
+        if(!encoded||encoded.length>50000||!/^[A-Za-z0-9_-]+$/.test(encoded))throw new Error('invalid link');
+        const base64=encoded.replace(/-/g,'+').replace(/_/g,'/').padEnd(Math.ceil(encoded.length/4)*4,'=');
+        const bytes=Uint8Array.from(atob(base64),character=>character.charCodeAt(0));
+        const deck=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+        if(!Array.isArray(deck)||!deck.length||deck.length>2000||deck.some(row=>!Array.isArray(row)||row.length!==2||row.some(value=>typeof value!=='string'||!value.trim()||value.length>300)))throw new Error('invalid deck');
+        return {present:true,deck}
+      }catch{return {present:true,deck:null}}
+    }
+    const linkImport=readStudyLink();
+    const $=id=>document.getElementById(id);let linkDeck=linkImport.deck,sheetSession=null,editorSession=null,editorSnapshot=null,editorInitial='',words=linkImport.present?(linkDeck?linkDeck.map(row=>[...row]):[]):load(),order=[],pos=0,drawn=false;
     function localWords(){try{const v=JSON.parse(localStorage.getItem('korean-words'));if(Array.isArray(v))return v.filter(x=>Array.isArray(x)&&x.length>1&&x[0]&&x[1]).map(x=>[String(x[0]),String(x[1])])}catch{}return []}
     function load(){const saved=localWords();return saved.length?saved:initial.map(x=>[...x])}
     function shuffle(){order=words.map((_,i)=>i).sort(()=>Math.random()-.5);pos=0;showCard()}
@@ -58,7 +72,7 @@
       editorSnapshot=sheetSession?JSON.stringify(sheetSession.snapshot):null;
       editorInitial=words.map(w=>w.join(', ')).join('\n');
       $('wordEditor').value=editorInitial;
-      $('wordStorageHint').textContent=sheetSession?'一行一個單字，格式是「韓文, 中文」。儲存後會寫入已連線的 Google Sheet。':'一行一個單字，格式是「韓文, 中文」。單字目前儲存在這個瀏覽器。';
+      $('wordStorageHint').textContent=sheetSession?'一行一個單字，格式是「韓文, 中文」。儲存後會寫入已連線的 Google Sheet。':linkDeck?'一行一個單字，格式是「韓文, 中文」。這是私人連結，本次修改只保留到離開頁面。':'一行一個單字，格式是「韓文, 中文」。單字目前儲存在這個瀏覽器。';
       setWordError('');
       $('wordDialog').showModal()
     }
@@ -76,6 +90,7 @@
     }
     async function persistWords(next){
       if(sheetSession)next=await KoreanSheets.save(sheetSession,next);
+      else if(linkDeck)linkDeck=next.map(row=>[...row]);
       else localStorage.setItem('korean-words',JSON.stringify(next));
       words=next.map(row=>[...row]);
       shuffle()
@@ -87,13 +102,13 @@
         if(editorSession!==sheetSession||(sheetSession&&editorSnapshot!==JSON.stringify(sheetSession.snapshot)))throw new Error('單字來源已更新，請關閉單字管理後重新開啟再編輯。');
         await persistWords(parseEditor($('wordEditor').value));
         $('wordDialog').close();
-        toast(sheetSession?'已儲存到 Google Sheet':'單字已儲存')
+        toast(sheetSession?'已儲存到 Google Sheet':linkDeck?'已更新本次練習':'單字已儲存')
       }catch(error){setWordError(error.message||'儲存失敗，請稍後再試。')}
       finally{$('saveWords').disabled=false}
     };
     const configKey='korean-sheet-config';
     function showSheetState(){
-      $('sourceStatus').textContent=sheetSession?`單字來源：Google Sheet「${sheetSession.name}」`:'單字來源：這個瀏覽器';
+      $('sourceStatus').textContent=sheetSession?`單字來源：Google Sheet「${sheetSession.name}」`:linkDeck?'單字來源：私人練習連結':linkImport.present?'無法讀取私人連結，請重新開啟完整連結。':'單字來源：這個瀏覽器';
       $('refreshSheet').hidden=!sheetSession;
       $('disconnectSheet').hidden=!sheetSession;
       $('copyLocalWords').hidden=!sheetSession||!localWords().length;
@@ -154,8 +169,8 @@
     };
     $('disconnectSheet').onclick=()=>{
       if(sheetSession)KoreanSheets.revoke(sheetSession);
-      sheetSession=null;words=load();showSheetState();shuffle();
-      sheetError('已結束連線，現在使用這個瀏覽器儲存的單字。')
+      sheetSession=null;words=linkDeck?linkDeck.map(row=>[...row]):linkImport.present?[]:load();showSheetState();shuffle();
+      sheetError(linkDeck?'已結束連線，現在使用私人練習連結的單字。':'已結束連線，現在使用這個瀏覽器儲存的單字。')
     };
     showSheetState();
     let noteFile=null,notePreviewUrl=null,ocrWorker=null,pdfjsPromise=null,currentOcrPage=1,totalOcrPages=1;
@@ -266,7 +281,7 @@
         $('ocrProgress').style.width='0%'
       }finally{$('runOcr').disabled=false}
     };
-    function parseImported(){return $('importResult').value.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>{let parts=line.split(/[,，\t|;；]/).map(x=>x.trim());if(parts.length<2){const separated=line.match(/^(.+?)\s+([\u3400-\u9fff].*)$/u);if(separated)parts=[separated[1].trim(),separated[2].trim()]}return parts}).filter(parts=>parts.length>=2&&parts[0]&&parts[1]).map(parts=>[parts[0],parts.slice(1).join(', ')])}function updateImportCount(){const n=parseImported().length;$('importCount').textContent=n?`找到 ${n} 組有效單字`:'請整理成「韓文, 中文」格式';$('addImported').disabled=!n}$('importResult').addEventListener('input',updateImportCount);$('addImported').onclick=async()=>{const imported=parseImported();if(!imported.length)return;$('addImported').disabled=true;$('importError').hidden=true;try{await persistWords(words.concat(imported));importDialog.close();if($('wordDialog').open)$('wordDialog').close();toast(sheetSession?`已將 ${imported.length} 個單字存入 Sheet`:`已加入 ${imported.length} 個單字`)}catch(error){$('importError').textContent=error.message||'儲存失敗，請稍後再試。';$('importError').hidden=false}finally{updateImportCount()}};
+    function parseImported(){return $('importResult').value.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>{let parts=line.split(/[,，\t|;；]/).map(x=>x.trim());if(parts.length<2){const separated=line.match(/^(.+?)\s+([\u3400-\u9fff].*)$/u);if(separated)parts=[separated[1].trim(),separated[2].trim()]}return parts}).filter(parts=>parts.length>=2&&parts[0]&&parts[1]).map(parts=>[parts[0],parts.slice(1).join(', ')])}function updateImportCount(){const n=parseImported().length;$('importCount').textContent=n?`找到 ${n} 組有效單字`:'請整理成「韓文, 中文」格式';$('addImported').disabled=!n}$('importResult').addEventListener('input',updateImportCount);$('addImported').onclick=async()=>{const imported=parseImported();if(!imported.length)return;$('addImported').disabled=true;$('importError').hidden=true;try{await persistWords(words.concat(imported));importDialog.close();if($('wordDialog').open)$('wordDialog').close();toast(sheetSession?`已將 ${imported.length} 個單字存入 Sheet`:linkDeck?`已加入 ${imported.length} 個單字（本次練習）`:`已加入 ${imported.length} 個單字`)}catch(error){$('importError').textContent=error.message||'儲存失敗，請稍後再試。';$('importError').hidden=false}finally{updateImportCount()}};
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}let toastTimer;function toast(s){$('toast').textContent=s;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),1800)}
     fitCanvas();shuffle();
   </script>
